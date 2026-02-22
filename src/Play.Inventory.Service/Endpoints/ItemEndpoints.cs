@@ -1,5 +1,6 @@
 using Play.Catalog.Service;
 using Play.Common;
+using Play.Inventory.Service.Clients;
 using Play.Inventory.Service.Entities;
 
 namespace Play.Inventory.Service.Endpoints;
@@ -15,15 +16,21 @@ public static class ItemEndpoints
         itemGroup.MapGet("/", async (IRepository<InventoryItem> repository) => Results.Ok(await repository.GetAllAsync()))
            .WithName("GetItemsAsync");
 
-        itemGroup.MapGet("user/{userId:guid}", async (Guid UserId, IRepository<InventoryItem> repository) =>
+        itemGroup.MapGet("user/{userId:guid}", async (Guid UserId, IRepository<InventoryItem> repository, CatalogClient catalogClient) =>
         {
             if (UserId == Guid.Empty)
             {
                 return Results.BadRequest();
             }
 
+            var catalogItems = await catalogClient.GetItemsAsync();
             var item = await repository.GetAllAsync(i => i.UserId == UserId);
-            return item is not null ? Results.Ok(item.Select(i => i.AsDto())) : Results.NotFound();
+
+            var result = from i in item
+                         join c in catalogItems! on i.CatalogItemId equals c.Id
+                         select i.AsDto(c);
+
+            return item is not null ? Results.Ok(result) : Results.NotFound();
         })
         .WithName("GetItemByUserIdAsync");
 
@@ -48,7 +55,7 @@ public static class ItemEndpoints
                 return Results.Ok(inventoryItem.AsDto());
             }
 
-            var item = new InventoryItemDto(Guid.NewGuid(), dto.UserId, dto.CatalogItemId, dto.Quantity, DateTimeOffset.UtcNow);
+            var item = new InventoryItemDto(Guid.NewGuid(), dto.UserId, dto.CatalogItemId, string.Empty, string.Empty, dto.Quantity, DateTimeOffset.UtcNow);
             await repository.CreateAsync(item.AsEntity());
             return Results.Created($"/items/{item.Id}", item);
         })

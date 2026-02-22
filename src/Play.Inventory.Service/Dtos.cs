@@ -15,6 +15,8 @@ public record InventoryItemDto(
     Guid Id,
     Guid UserId,
     Guid CatalogItemId,
+    string CatalogItemName,
+    string CatalogItemDescription,
     int Quantity,
     DateTimeOffset AcquiredDate
 );
@@ -26,4 +28,10 @@ public record UpdateInventoryItemDto(
     Guid CatalogItemId,
     [property: Range(0, 9999999)]
     int Quantity
+);
+
+public record CatalogItemDto(
+    Guid Id,
+    string Name,
+    string Description
 );

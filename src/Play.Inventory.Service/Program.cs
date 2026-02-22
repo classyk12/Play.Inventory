@@ -1,6 +1,8 @@
 using Play.Common;
 using Play.Common.MongoDb;
+using Play.Inventory.Service.Clients;
 using Play.Inventory.Service.Endpoints;
+using Polly;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +14,11 @@ builder.Services.AddMongoServices();
 
 // register the open-generic repository; MongoRepository<T> now computes its own collection name
 builder.Services.AddSingleton(typeof(IRepository<>), typeof(MongoRepository<>));
+builder.Services.AddHttpClient<CatalogClient>(c =>
+{
+    var settings = builder.Configuration.GetSection("PlayCatalogService").Get<CatalogClientSettings>();
+    c.BaseAddress = new Uri(settings?.HostAddress ?? throw new InvalidOperationException("Catalog service host address is not configured"));
+}).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(1)));
 
 var app = builder.Build();
 
