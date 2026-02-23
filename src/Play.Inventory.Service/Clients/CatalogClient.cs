@@ -33,7 +33,6 @@ namespace Play.Inventory.Service.Clients
         /// </summary>
         public async Task<IEnumerable<CatalogItemDto>?> GetItemsAsync()
         {
-            return [];
             return await _httpClient.GetFromJsonAsync<IEnumerable<CatalogItemDto>>($"items");
         }
     }
