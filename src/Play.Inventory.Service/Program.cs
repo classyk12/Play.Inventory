@@ -1,4 +1,5 @@
 using Play.Common;
+using Play.Common.MassTransit;
 using Play.Common.MongoDb;
 using Play.Inventory.Service.Clients;
 using Play.Inventory.Service.Endpoints;
@@ -16,7 +17,7 @@ builder.Services.AddMongoServices();
 // register the open-generic repository; MongoRepository<T> now computes its own collection name
 builder.Services.AddSingleton(typeof(IRepository<>), typeof(MongoRepository<>));
 
-AddCatalogClientHttpConfiguration(builder);
+builder.Services.AddMassTransitWithRabbitMq();
 
 var app = builder.Build();
 
@@ -48,7 +49,9 @@ static void AddCatalogClientHttpConfiguration(WebApplicationBuilder builder)
         var settings = builder.Configuration.GetSection("PlayCatalogService").Get<CatalogClientSettings>();
         c.BaseAddress = new Uri(settings?.HostAddress ?? throw new InvalidOperationException("Catalog service host address is not configured"));
     }).
-    //the below policy will retry up to 3 times with an exponential backoff strategy, and it will also handle timeout exceptions by retrying the request.
+
+    #region Polly policies
+    //!The below policy will retry up to 3 times with an exponential backoff strategy, and it will also handle timeout exceptions by retrying the request.
     AddTransientHttpErrorPolicy(builder => builder.Or<TimeoutRejectedException>().WaitAndRetryAsync(3, retryAttempt =>
     TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)) + TimeSpan.FromMilliseconds(jitterer.Next(0, 100)),
     onRetry: (outcome, timespan, retryAttempt, context) =>
@@ -57,6 +60,7 @@ static void AddCatalogClientHttpConfiguration(WebApplicationBuilder builder)
         Console.WriteLine($"Retrying... Attempt: {retryAttempt}, Reason: {outcome.Exception?.Message}");
     }
     )).
+    //!The below policy will break the circuit after 3 consecutive failures and will keep the circuit open for 15 seconds before allowing attempts again. It also handles timeout exceptions as part of the transient errors that can trigger the circuit breaker.
     AddTransientHttpErrorPolicy(builder => builder.Or<TimeoutRejectedException>().CircuitBreakerAsync(3, TimeSpan.FromSeconds(15),
     onBreak: (outcome, timespan) =>
     {
@@ -70,5 +74,7 @@ static void AddCatalogClientHttpConfiguration(WebApplicationBuilder builder)
         Console.WriteLine("Circuit breaker reset.");
     }
     )).
+    //!Timeouts
     AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(1)));
+    #endregion
 }

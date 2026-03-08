@@ -2,6 +2,7 @@ using Play.Catalog.Service;
 using Play.Common;
 using Play.Inventory.Service.Clients;
 using Play.Inventory.Service.Entities;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Play.Inventory.Service.Endpoints;
 
@@ -16,15 +17,15 @@ public static class ItemEndpoints
         itemGroup.MapGet("/", async (IRepository<InventoryItem> repository) => Results.Ok(await repository.GetAllAsync()))
            .WithName("GetItemsAsync");
 
-        itemGroup.MapGet("user/{userId:guid}", async (Guid UserId, IRepository<InventoryItem> repository, CatalogClient catalogClient) =>
+        itemGroup.MapGet("user/{userId:guid}", async (Guid userId, IRepository<InventoryItem> repository, [FromServices] CatalogClient catalogClient) =>
         {
-            if (UserId == Guid.Empty)
+            if (userId == Guid.Empty)
             {
                 return Results.BadRequest();
             }
 
             var catalogItems = await catalogClient.GetItemsAsync();
-            var item = await repository.GetAllAsync(i => i.UserId == UserId);
+            var item = await repository.GetAllAsync(i => i.UserId == userId);
 
             var result = from i in item
                          join c in catalogItems! on i.CatalogItemId equals c.Id
