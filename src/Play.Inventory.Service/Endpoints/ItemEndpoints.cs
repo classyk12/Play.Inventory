@@ -1,8 +1,7 @@
 using Play.Catalog.Service;
 using Play.Common;
-using Play.Inventory.Service.Clients;
 using Play.Inventory.Service.Entities;
-using Microsoft.AspNetCore.Mvc;
+using MassTransit.Initializers;
 
 namespace Play.Inventory.Service.Endpoints;
 
@@ -17,21 +16,22 @@ public static class ItemEndpoints
         itemGroup.MapGet("/", async (IRepository<InventoryItem> repository) => Results.Ok(await repository.GetAllAsync()))
            .WithName("GetItemsAsync");
 
-        itemGroup.MapGet("user/{userId:guid}", async (Guid userId, IRepository<InventoryItem> repository, [FromServices] CatalogClient catalogClient) =>
+        itemGroup.MapGet("user/{userId:guid}", async (Guid userId, IRepository<InventoryItem> InventoryItemrepository, IRepository<CatalogItem> catalogItemRepository) =>
         {
             if (userId == Guid.Empty)
             {
                 return Results.BadRequest();
             }
 
-            var catalogItems = await catalogClient.GetItemsAsync();
-            var item = await repository.GetAllAsync(i => i.UserId == userId);
+            var items = await InventoryItemrepository.GetAllAsync(i => i.UserId == userId);
+            var itemIds = items.Select(i => i.CatalogItemId);
+            var catalogItems = await catalogItemRepository.GetAllAsync(c => itemIds.Contains(c.Id));
 
-            var result = from i in item
+            var result = from i in items
                          join c in catalogItems! on i.CatalogItemId equals c.Id
-                         select i.AsDto(c);
+                         select i.AsDto(new CatalogItemDto(c.Id, c.Name, c.Description));
 
-            return item is not null ? Results.Ok(result) : Results.NotFound();
+            return items is not null ? Results.Ok(result) : Results.NotFound();
         })
         .WithName("GetItemByUserIdAsync");
 
